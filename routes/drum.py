@@ -1,18 +1,26 @@
-from fastapi import APIRouter
-from schemas.drum import Drum
+from fastapi import APIRouter, Depends
+from schemas.drum import Drum, DrumResponseModel
 from database.dataset import drumDataBase
+from database.connection import get_db
+from database.models import Drum as DrumTableModel
+from sqlalchemy.orm import Session
+
 
 router = APIRouter(prefix="/drums", tags=["drums"])
 
 
-@router.get("/")
-def getDrums():
-    return {"data": drumDataBase}
+@router.get("/", response_model=list[DrumResponseModel])
+def getDrums(db: Session = Depends(get_db)):
+    drums = db.query(DrumTableModel).all()
+    return drums
 
 @router.post("/")
-def addDrum(drum: Drum):
-    drumDataBase.append(drum.dict())
-    return {"data": drumDataBase}
+def addDrum(drum: Drum, db: Session = Depends(get_db)):
+    drumData = DrumTableModel(title=drum.title, description=drum.description)
+    db.add(drumData)
+    db.commit()
+    db.refresh(drumData)
+    return {"data": drumData}
 
 @router.delete("/{drumId}")
 def deleteDrum(drumId: int):
@@ -26,9 +34,8 @@ def deleteDrum(drumId: int):
 
 
 @router.get("/{drumName}")
-def getSpecificDrum(drumName: str):
-    for drum in drumDataBase:
-        if drum["name"] == drumName.lower():
-            return drum
-        
+def getSpecificDrum(drumName: str, db: Session = Depends(get_db)):
+    drum = db.query(DrumTableModel).filter(DrumTableModel.title.ilike(f"%{drumName}%")).first()
+    if drum:
+        return {"data": drum}        
     return {"message": "Found nothing"}
